@@ -1,0 +1,54 @@
+# options specified here will apply to all posts in this folder
+
+# freeze computational output
+# (see https://quarto.org/docs/projects/code-execution.html#freeze)
+freeze: auto  #- {true, false, auto}
+
+# Enable CC licence appendix
+license: "CC BY"
+
+# Default for table of contents
+toc: true
+toc-depth: 3
+toc-location: right
+toc-title: Índice
+number-sections: true
+number-depth: 3
+smooth-scroll: true
+
+#- Default execute options
+execute:
+  echo: true
+  message: false
+  warning: false
+  eval: true
+
+#- Default knitr options
+knitr:
+  opts_chunk: 
+    collapse: true
+    comment: "#>" 
+    fig.asp:  7/9
+    out.width: "95%"
+    fig.align: "center"
+    fig.show: "hold"
+    R.options:
+      options(scipen = 999) #- para quitar la notación científica  
+
+#- https://mine-cetinkaya-rundel.github.io/quarto-tip-a-day/posts/16-code-tools/
+#code-fold: show
+code-tools: true
+code-link: true
+  
+ 
+# Enable banner style title blocks
+title-block-banner: "green" #-"#AA0000"
+title-block-banner-color: "red" #-"#FFFFFF"  
+
+format: 
+  html:
+    #backgroundcolor: "#F1F3F4"
+    #standalone: true  
+    link-external-newwindow: true
+    css: assets/my_styles.css
+ 
