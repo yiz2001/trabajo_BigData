@@ -1,0 +1,349 @@
+---
+title: "EL RAMEN MOLA"
+description: |
+  Viendo si alguna marca de ramen que me gusta está incluido en el ramen-rating
+author: Yi Zhang (yiz3@alumni.uv.es)  #--
+date: 2023-01-12                  #--
+categories: [trabajo BigData]   #--
+image: "./imagenes/imagen_01.png"
+title-block-banner: true #- {true, false, "green","#AA0000"}
+title-block-banner-color: "red"    #-"#FFFFFF" 
+toc: true
+toc-location: left
+toc-depth: 3
+smooth-scroll: true
+format: 
+  html:
+    backgroundcolor: "#faeec5"
+    standalone: true  
+    link-external-newwindow: true
+    css: ./assets/my_css_file.css   #- CUIDADO!!!!
+code-tools: true
+code-link: true
+---
+
+
+## Introducción
+
+Hoy en día, se ha hecho muy popular la comida asiática. En los últimos años, ha aparecido gran cantidad de restaurantes japoneses, chinos, coreanos, etc. Cabe destacar la diversidad de platos que hay en cada tipo de comida. En especial, dentro de todos los platos, el ramen es el más famoso, la razón por la que he decidido realizar este trabajo.
+
+La historia del ramen comenzó a partir de mediados del siglo XIX, cuando el país nipón abrió sus fronteras al resto del mundo y empezaron a llegar viajeros, comerciantes y emigrantes de otras culturas. A partir de allí, los japoneses crearon el ramen a través de la adaptación de los fideos chinos. A diferencia de los soba de alforfón, el ramen se prepara con fideos de trigo de tipo chino, de los que podemos encontrar hoy en otros restaurantes asiáticos.
+
+El trabajo consiste en analizar todas las variedades que existen del ramen, de donde se origina, compararlas y ver cuáles son los mejores.
+
+![Una foto del ramen](./imagenes/imagen_01.png)
+
+- - - 
+
+## Datos
+
+::: {.panel-tabset}
+
+### Datos
+
+Los datos de ramen provienen de la tabla del dataset de Kaggle: [ramen-rating](https://www.kaggle.com/datasets/residentmario/ramen-ratings).
+
+### Códigos
+
+```{r}
+
+# Paquetes que voy a usar:
+library(tidyverse)
+library(gt)
+library(plotly)
+
+# Cargar datos:
+df <- rio::import("./datos/ramen_ratings.csv")
+
+
+# Transformación de datos:
+df_1 <- df %>% 
+  group_by(Country) %>% 
+  count() %>% 
+  arrange(desc(n)) %>% 
+  mutate(porcentaje = (n*100)/2580) %>% 
+  mutate(porcentaje = round(porcentaje, 2)) %>% 
+  mutate(Country = as.factor(Country))
+
+df_2 <- df %>% 
+  mutate(Stars = as.numeric(Stars)) %>% 
+  filter(Stars >= 4.00) %>% 
+  group_by(Country) %>% 
+  count(Country) %>% 
+  arrange(desc(n))
+df_2 <- df_2 %>%  
+  filter(Country != "Sarawak") %>% 
+  mutate(Country = case_when(
+    Country == "USA" ~ "United States of America",
+    Country == "UK" ~ "United Kingdom",
+    Country == "Hong Kong" ~ "Hong Kong S.A.R.",
+    TRUE ~ Country
+  ))
+
+df_3 <- df %>% 
+  select("Marca" = "Brand", "Variedad" = "Variety", "pais" = "Country", "Stars") %>% 
+  mutate(Stars = round(as.numeric(Stars)))
+df_3 <- df_3 %>% 
+  mutate(Stars = as.factor(Stars))
+
+df_4 <- df %>% 
+  mutate(`Top Ten` = as.character(`Top Ten`)) %>%  
+  tidyr::separate(`Top Ten`, sep = "#", 
+                  into = c("fecha", "nivel"), extra = "merge") %>% 
+  tidyr::drop_na(nivel) %>% 
+  select(-c("Review #", "Stars"))
+
+df_4 <- df_4 %>% 
+  mutate(fecha = as.Date(fecha, "%Y")) %>% 
+  mutate(fecha = lubridate::ymd(fecha)) %>% 
+  mutate(anyo = lubridate::year(fecha))  %>% 
+  select(-fecha) %>% 
+  arrange(anyo) %>% 
+  mutate(nivel = as.numeric(nivel))
+
+
+```
+
+:::
+
+
+- - - 
+
+## Japón: líder en marcas
+
+En primer lugar, vamos a calcular qué países poseen la mayoría de las marcas de ramen en todo el mundo.
+```{r}
+
+p1 <- ggplot( df_1, aes(reorder(Country, porcentaje), porcentaje, fill = Country))+
+  geom_col() +
+  geom_text(aes(label= porcentaje, color = Country),
+            hjust = -0.15,
+            position = position_dodge2(width = 1, preserve = 'single')) +
+  theme_minimal() +
+  labs(title = "Gráfico 1: ¿La mayoría de las marcas de ramen de dónde provienen?",
+       caption = "Elaboración propia con datos de Kaggle") +
+  theme(plot.caption.position = "panel") +
+  xlab('') + 
+  ylab('proporción(%)') +
+  theme(legend.position = "none") +
+  coord_flip()
+p1
+```
+
+Según el gráfico 1, podemos observar que, evidentemente los países asiáticos ocupan los puestos de la mayoría de producción debido a su cultura. Dentro de ellos, Japón es el que posee más, seguido por Estados Unidos, Corea del Sud, Taiwan(China) y Tailandia, estos 5 países forman el 50% de todas las marcas del mundo. Esto quiere decir que, estos 5 países ocupan la mitad del mercado de ramen. Cabe destacar que Estados Unidos siendo un país no asiático está en el segundo puesto.
+
+- - - - 
+
+A continuación, vamos a calcular qué países posee la mayor cantidad de marcas de ramen con mejor calidad, que han obtenido igual o mayor de 4 estrellas.
+
+```{r}
+world <- rnaturalearth::ne_countries(scale = "medium", returnclass = "sf") 
+mapa <- full_join(df_2, world, by = c("Country" = "admin"))
+
+p2 <- ggplot() +
+  geom_sf(data = mapa, aes(geometry = geometry, fill = n)) +
+  theme_void()  +
+  scale_fill_continuous(low="#ffba8c",high="#ff6803") +
+  labs(title = "Gráfico 2: Países con mejores marcas de ramen",
+       subtitle = "(n = número de marcas > 4 estrellas)",
+       caption = "Elaboración propia con datos de Kaggle") +
+  theme(plot.caption.position = "panel") +
+  theme(legend.position = "bottom")
+p2
+```
+
+Conforme nos muestra el gráfico 2, sonde los países están más oscuros tienen más marcas de ramen de alta calidad. Japón sigue siendo el top 1. En este caso el ranking posterior ocurre diferencias que el posterior. Corea del Sur pasa al segundo puesto, mientras Estados Unidos baja al tercer puesto. Cabe mencionar que, los países que no poseen ningún ramen con más de 4 estrellas son: Colombia, Holanda, Dubai, Finlandia, Sarawak, Suiza, Estonia, Ghana y Nigeria.
+
+- - - 
+
+## ¿Cuáles son las mejores ramen que hay en el mundo?
+
+Para más información sobre la calidad de cada variedad de ramen, he elaborado una tabla que contiene todas las informaciones detalladas sobre cada variedad.
+
+::: {.panel-tabset}
+### Cero
+```{r}
+df_3_cero <- df_3 %>% 
+  filter(Stars == 0)
+p3_0 <- gt::gt(df_3_cero)
+p3_0 <- p3_0 %>% 
+  gtExtras::gt_fa_rating(column = Stars,  
+                         max_rating = 5, 
+                         color = "#f9e14b", 
+                         icon = "star") %>% 
+  cols_width(columns = c(Stars) ~ px(250)) %>% 
+  tab_header(title = "Tabla 1: Comentario sobre cada variedad de ramen",
+             subtitle = md("(siendo máximo **5 estrellas**)")) %>% 
+  tab_source_note(md("Fuente: datos de [Kaggle](https://www.kaggle.com/datasets/residentmario/ramen-ratings)"))
+
+p3_0 %>% gtExtras::gt_theme_espn()
+
+```
+
+### Una
+```{r}
+df_3_una <- df_3 %>% 
+  filter(Stars == 1)
+p3_1 <- gt::gt(df_3_una)
+p3_1 <- p3_1 %>% 
+  gtExtras::gt_fa_rating(column = Stars,  
+                         max_rating = 5, 
+                         color = "#f9e14b", 
+                         icon = "star") %>% 
+  cols_width(columns = c(Stars) ~ px(250)) %>% 
+  tab_header(title = "Tabla 1: Comentario sobre cada variedad de ramen",
+             subtitle = md("(siendo máximo **5 estrellas**)")) %>% 
+  tab_source_note(md("Fuente: datos de [Kaggle](https://www.kaggle.com/datasets/residentmario/ramen-ratings)"))
+
+p3_1 %>% gtExtras::gt_theme_espn()
+
+```
+
+### Dos
+```{r}
+df_3_dos <- df_3 %>% 
+  filter(Stars == 2)
+p3_2 <- gt::gt(df_3_dos)
+p3_2 <- p3_2 %>% 
+  gtExtras::gt_fa_rating(column = Stars,  
+                         max_rating = 5, 
+                         color = "#f9e14b", 
+                         icon = "star") %>% 
+  cols_width(columns = c(Stars) ~ px(250)) %>% 
+  tab_header(title = "Tabla 1: Comentario sobre cada variedad de ramen",
+             subtitle = md("(siendo máximo **5 estrellas**)")) %>% 
+  tab_source_note(md("Fuente: datos de [Kaggle](https://www.kaggle.com/datasets/residentmario/ramen-ratings)"))
+
+p3_2 %>% gtExtras::gt_theme_espn()
+
+```
+
+### Tres
+```{r}
+df_3_tres <- df_3 %>% 
+  filter(Stars == 3)
+p3_3 <- gt::gt(df_3_tres)
+p3_3 <- p3_3 %>% 
+  gtExtras::gt_fa_rating(column = Stars,  
+                         max_rating = 5, 
+                         color = "#f9e14b", 
+                         icon = "star") %>% 
+  cols_width(columns = c(Stars) ~ px(250)) %>% 
+  tab_header(title = "Tabla 1: Comentario sobre cada variedad de ramen",
+             subtitle = md("(siendo máximo **5 estrellas**)")) %>% 
+  tab_source_note(md("Fuente: datos de [Kaggle](https://www.kaggle.com/datasets/residentmario/ramen-ratings)"))
+
+p3_3 %>% gtExtras::gt_theme_espn()
+
+```
+
+### Cuatro
+```{r}
+df_3_cuatro <- df_3 %>% 
+  filter(Stars == 4)
+p3_4 <- gt::gt(df_3_cuatro)
+p3_4 <- p3_4 %>% 
+  gtExtras::gt_fa_rating(column = Stars,  
+                         max_rating = 5, 
+                         color = "#f9e14b", 
+                         icon = "star") %>% 
+  cols_width(columns = c(Stars) ~ px(250)) %>% 
+  tab_header(title = "Tabla 1: Comentario sobre cada variedad de ramen",
+             subtitle = md("(siendo máximo **5 estrellas**)")) %>% 
+  tab_source_note(md("Fuente: datos de [Kaggle](https://www.kaggle.com/datasets/residentmario/ramen-ratings)"))
+
+p3_4 %>% gtExtras::gt_theme_espn()
+
+```
+
+### Cinco
+```{r}
+df_3_cinco <- df_3 %>% 
+  filter(Stars == 5)
+p3_5 <- gt::gt(df_3_cinco)
+p3_5 <- p3_5 %>% 
+  gtExtras::gt_fa_rating(column = Stars,  
+                         max_rating = 5, 
+                         color = "#f9e14b", 
+                         icon = "star") %>% 
+  cols_width(columns = c(Stars) ~ px(250)) %>% 
+  tab_header(title = "Tabla 1: Comentario sobre cada variedad de ramen",
+             subtitle = md("(siendo máximo **5 estrellas**)")) %>% 
+  tab_source_note(md("Fuente: datos de [Kaggle](https://www.kaggle.com/datasets/residentmario/ramen-ratings)"))
+
+p3_5 %>% gtExtras::gt_theme_espn()
+
+```
+
+:::
+- - - - - 
+
+Por último, con las valoraciones oficiales podemos conocer cuáles son los mejores ramen que hay durante los años 2012 hasta 2016.
+
+```{r}
+p4 <- ggplot(df_4, 
+             aes( x = Variety,
+                  y = nivel,
+                  color = Brand)) +
+  geom_point(size = 2.5) +
+  facet_grid(cols = vars(anyo)) +
+  scale_y_reverse(breaks = 1:nrow(df_4)) +
+  labs(title = "Gráfico 3: Top Ten de las variedades de ramen",
+       subtitle = "(del 2012 al 2016)",
+       caption = "Elaboración propia con datos de Kaggle") +
+  theme(plot.caption.position = "panel") +
+  xlab('') + 
+  ylab('') +
+  theme_light() +
+  theme(legend.position = "none")
+
+ggplotly(p4)
+```
+
+Para ello he utilizado la función de facetting con la finalidad de hacer comparaciones para cada añño. El mejor ramen según las valoraciones para cada año son las siguientes:
+
+- 2012: Special Fried Curly Noodle de la marca Indomie que proviene de Indonesia
+- 2013: Singapore Laksa La Mian de la marca Prima Taste con origen Singapur
+- 2014: Penang White Curry Noodle de la marca MyKuali que proviene de Malasia
+- 2015: Penang Red Tom Yum Goong Noodle de la misma marca MyKuali también de Malasia
+- 2016: Singapore Laksa Wholegrain La Mian de la marca Prima Taste de Singapur
+
+- - - 
+
+## Bibliografía
+
+Para la realización de los gráficos y los comentarios pertinentes me he basado en la información que voy a exponer en los siguientes párrafos.
+
+Para poder realizar los comentarios, me he formado con el siguiente [artículo](https://www.directoalpaladar.com/cultura-gastronomica/que-es-el-ramen-y-por-que-se-ha-hecho-tan-popular)
+
+Con el paquete plotly, he conseguido realizar gráficos interactivos.
+
+Para realizar la tabla interactiva, he utilizado el paquete gt.
+
+Por último, destacar como tambiém he consultado trabajos realizados por nuestros compañeros el año anterior. Estos últimos los podemos encontrar [aquí](https://perezp44.github.io/intro-ds-22-23-web/07-trabajos_2022-23.html).
+
+
+- - - 
+
+<br>
+
+Con esto acabo mi trabajo para BigData!!
+
+<br>
+
+- - - 
+
+<br>
+
+### Información sobre la sesión
+
+Abajo muestro mi entorno de trabajo y paquetes utilizados
+
+```{r}
+#| echo: false
+sessioninfo::session_info() %>% 
+  details::details(summary = 'current session info') 
+```
+
+
+
